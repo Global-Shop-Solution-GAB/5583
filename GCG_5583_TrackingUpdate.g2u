@@ -1,0 +1,215 @@
+Program.Sub.Preflight.Start
+Program.Sub.Preflight.End
+
+Program.Sub.Main.Start
+F.Intrinsic.Control.Try
+V.Local.sError.Declare(String, "")
+'This project will update the sales order on Shopify with the tracking information when an order is shipped. Part of the integration with Shopify.
+'This project requires the ID for teh order from Shopify to be in the CUSTOMER PO field of the order header.
+'Created for Mixer Direct by FEQ 6/25/2019. We will be using REST API functions. Integrating with Shopify.
+
+F.Intrinsic.Control.If(V.Caller.Hook, =, "28532")
+	F.ODBC.Connection!conx.OpenCompanyConnection
+	'Tracking number is passed in 000138 and PO number (for the web id order) is passed in 000328 and Ship Via is passed in 000180
+	F.Intrinsic.Control.CallSub(Verification)
+	F.Intrinsic.Control.CallSub(GrabTrackingInfo)
+	F.Intrinsic.Control.CallSub(ShipViaDic)
+	F.Intrinsic.Control.CallSub(ProcessUpdate)
+	F.ODBC.Connection!conx.Close
+F.Intrinsic.Control.EndIf
+
+F.Intrinsic.Control.Catch
+	F.Intrinsic.String.Concat("Project: GCG_5583_TrackingUpdate.g2u", V.Ambient.Newline,V.Ambient.Newline,"Subroutine: ",V.Ambient.CurrentSubroutine,V.Ambient.NewLine,"Error Occurred ",V.Ambient.ErrorNumber," with description ",V.Ambient.ErrorDescription,V.Local.sError)
+	F.Intrinsic.UI.Msgbox(V.Local.sError) 
+	F.Intrinsic.Control.CallSub(Unload)
+F.Intrinsic.C ontrol.Endtry
+Program.Sub.Main.End
+
+Program.Sub.GrabTrackingInfo.Start
+F.Intrinsic.Control.Try
+V.Local.sError.Declare(String, "")
+V.Local.sSql.Declare(String, "")
+V.Local.sRet.Declare(String, "")
+V.Local.dShipDate.Declare(Date, "01/01/2019")
+
+'We want to verify that the order that is being shipped has trackig information
+F.Intrinsic.Date.ConvertDString(V.Passed.000206, "MMDDYY", V.Local.dShipDate)
+
+F.Intrinsic.String.Build("Select ORDER_REC from V_SHIPMENT_LINES where ORDER_NO = '{0}' and PCK_NO = '{1}' and DATE_SHIP = '{2}'", V.Passed.FIRST-ORDER, V.Passed.000168, V.Local.dShipDate.PervasiveDate, V.Local.sSql)
+F.Data.DataTable.CreateFromSQL("dtRecs", "conx", V.Local.sSql, True)
+
+F.Intrinsic.Control.Catch
+	F.Intrinsic.String.Concat("Project: GCG_5583_TrackingUpdate.g2u", V.Ambient.Newline,V.Ambient.Newline,"Subroutine: ",V.Ambient.CurrentSubroutine,V.Ambient.NewLine,"Error Occurred ",V.Ambient.ErrorNumber," with description ",V.Ambient.ErrorDescription,V.Local.sError)
+	F.Intrinsic.UI.Msgbox(V.Local.sError) 
+	F.Intrinsic.Control.CallSub(Unload)
+F.Intrinsic.Control.Endtry
+Program.Sub.GrabTrackingInfo.End
+
+Program.Sub.GrabOnlineInfo.Start
+F.Intrinsic.Control.Try
+V.Local.sError.Declare(String, "")
+
+'The ID for the order on Shopify will be saved in the Customer PO field in the order header.
+
+F.Intrinsic.Control.Catch
+	F.Intrinsic.String.Concat("Project: GCG_5583_TrackingUpdate.g2u", V.Ambient.Newline,V.Ambient.Newline,"Subroutine: ",V.Ambient.CurrentSubroutine,V.Ambient.NewLine,"Error Occurred ",V.Ambient.ErrorNumber," with description ",V.Ambient.ErrorDescription,V.Local.sError)
+	F.Intrinsic.UI.Msgbox(V.Local.sError) 
+	F.Intrinsic.Control.CallSub(Unload)
+F.Intrinsic.Control.Endtry
+Program.Sub.GrabOnlineInfo.End
+
+Program.Sub.ProcessUpdate.Start
+F.Intrinsic.Control.Try
+V.Local.sError.Declare(String, "")
+V.Local.sUser.Declare(String, "")
+V.Local.sPass.Declare(String, "")
+V.Local.sTemp.Declare(String, "")
+V.Local.sTest.Declare(String, "")
+V.Local.sRet.Declare(String, "")
+V.Local.sURL.Declare(String, "")
+V.Local.sBody.Declare(String, "")
+V.Local.sVia.Declare(String, "")
+V.Local.sSql.Declare(String, "")
+
+V.Local.sUser.Set("4852e9aa53b7a2630b09d99e31f1a1a7")
+'V.Local.sPass.Set("WAUdKKFz&hDwxpmu*BFZ6h&P")
+V.Local.sPass.Set("cc8a783818abc9c6309e3ba34c5ff562")
+
+F.Communication.REST.SetProperty("HTTPMethod","POST")
+F.Communication.REST.SetProperty("User",V.Local.sUser)
+F.Communication.REST.SetProperty("Password",V.Local.sPass)
+F.Communication.REST.SetProperty("ContentType", "application/json; charset=utf-8")
+F.Communication.REST.SetProperty("Accept","application/json")
+F.Communication.REST.Config("SSLEnabledProtocols=4032",V.Local.sRet)
+
+V.Local.sVia.Set(V.Dictionary.dicVia![V.Passed.000138.Ucase])
+'We need to create a fulfillment for the order to add the tracking information. The URL requires the Order ID, which is passed in V.Passed.000328
+'F.Intrinsic.String.Build("https://mixer-direct.myshopify.com/admin/api/2019-04/orders/{0}/fulfillments.json", V.Passed.000328.Trim, V.Local.sURL)
+
+'We changed the logic on how the order id on the website is saved in GS, so we are pulling it in above from the Order_Sort field of the order.
+F.Intrinsic.String.Build("Select TOP 1 ORDER_SORT from V_ORDER_HEADER where ORDER_NO = '{0}'", V.Passed.FIRST-ORDER, V.Local.sSql)
+F.ODBC.Connection!conx.ExecuteAndReturn(V.Local.sSql, V.Local.sRet)
+
+F.Intrinsic.Control.If(V.Local.sRet.Long, =, 0)
+	F.Intrinsic.Control.CallSub(Unload)
+F.Intrinsic.Control.EndIf
+
+F.Intrinsic.String.Build("https://mixer-direct.myshopify.com/admin/api/2019-04/orders/{0}/fulfillments.json", V.Local.sRet.Long, V.Local.sURL)
+
+'We are going to build a json script that will update the order in Shopify with the tracking information.
+F.Intrinsic.String.Build("{{0}fulfillment{0}:{{0}location_id{0}:1539375127,{0}tracking_number{0}:{0}{2}{0},{0}tracking_company{0}:{0}{1}{0}}}", V.Ambient.DblQuote, V.Local.sVia, V.Passed.000180.Trim, V.Local.sBody)
+
+F.Communication.REST.SetProperty("PostData", V.Local.sBody)
+'F.Communication.REST.Post(V.Local.sURL)
+
+F.Communication.REST.DoEvents()
+F.Communication.REST.ReadProperty("TransferredData", V.Local.sTemp)
+	
+F.Intrinsic.Control.Catch
+	F.Intrinsic.String.Concat("Project: GCG_5583_TrackingUpdate.g2u", V.Ambient.Newline,V.Ambient.Newline,"Subroutine: ",V.Ambient.CurrentSubroutine,V.Ambient.NewLine,"Error Occurred ",V.Ambient.ErrorNumber," with description ",V.Ambient.ErrorDescription,V.Local.sError)
+	F.Intrinsic.UI.Msgbox(V.Local.sError) 
+	F.Intrinsic.Control.CallSub(Unload)
+F.Intrinsic.Control.Endtry
+Program.Sub.ProcessUpdate.End
+
+Program.Sub.Unload.Start
+F.Intrinsic.Control.Try
+V.Local.sError.Declare(String, "")
+
+F.ODBC.Connection!conx.Close
+
+F.Intrinsic.Control.End
+
+F.Intrinsic.Control.Catch
+	F.Intrinsic.String.Concat("Project: GCG_5583_TrackingUpdate.g2u", V.Ambient.Newline,V.Ambient.Newline,"Subroutine: ",V.Ambient.CurrentSubroutine,V.Ambient.NewLine,"Error Occurred ",V.Ambient.ErrorNumber," with description ",V.Ambient.ErrorDescription,V.Local.sError)
+'	F.Intrinsic.UI.Msgbox(V.Local.sError)
+	F.Intrinsic.Control.End
+F.Intrinsic.Control.Endtry
+Program.Sub.Unload.End
+
+Program.Sub.Verification.Start
+F.Intrinsic.Control.Try
+V.Local.sError.Declare(String, "")
+
+'We want to verify that there is tracking information an dShip Via information
+F.Intrinsic.Control.If(V.Passed.000138.Trim, =, "")
+	'Messagebox?
+	F.Intrinsic.UI.Msgbox("No Tracking Number found on the screen. The order was not updated with tracking information on the website.", "TRACKING NUMBER ERROR")
+	F.Intrinsic.Control.Callsub(Unload)
+F.Intrinsic.Control.EndIf
+
+F.Intrinsic.Control.If(V.Passed.000180, =, "")
+	'Messagebox?
+	F.Intrinsic.UI.Msgbox("No Ship Via found on the screen. The order was not updated with ship via information on the website.", "TRACKING NUMBER ERROR")
+	F.Intrinsic.Control.CallSub(Unload)
+F.Intrinsic.Control.EndIf
+
+F.Intrinsic.Control.Catch
+	F.Intrinsic.String.Concat("Project: GCG_5583_TrackingUpdate.g2u", V.Ambient.Newline,V.Ambient.Newline,"Subroutine: ",V.Ambient.CurrentSubroutine,V.Ambient.NewLine,"Error Occurred ",V.Ambient.ErrorNumber," with description ",V.Ambient.ErrorDescription,V.Local.sError)
+	F.Intrinsic.UI.Msgbox(V.Local.sError) 
+	F.Intrinsic.Control.End
+F.Intrinsic.Control.Endtry
+Program.Sub.Verification.End
+
+Program.Sub.ShipViaDic.Start
+F.Intrinsic.Control.Try
+V.Local.sError.Declare(String, "")
+
+F.Data.Dictionary.Create("dicVia")
+'F.Data.Dictionary.AddItem("dicVia", "DROP SHIP", "")
+F.Data.Dictionary.AddItem("dicVia", "ABF", "FedEx Freight Priority")
+F.Data.Dictionary.AddItem("dicVia", "FEDEX FREIGHT PRIORI", "FedEx Freight Priority")
+F.Data.Dictionary.AddItem("dicVia", "BEST WAY POSSIBLE", "FedEx 2 day AM") 
+F.Data.Dictionary.AddItem("dicVia", "FEDEX 2 DAY AM", "FedEx 2 day AM")
+F.Data.Dictionary.AddItem("dicVia", "SAIA", "FedEx Express Saver")
+F.Data.Dictionary.AddItem("dicVia", "FEDEX EXPRESS SAVER", "FedEx Express Saver")
+F.Data.Dictionary.AddItem("dicVia", "DHL", "FedEx First Overnight")
+F.Data.Dictionary.AddItem("dicVia", "FEDEX FIRST OVERNIGH", "FedEx First Overnight")
+F.Data.Dictionary.AddItem("dicVia", "ESTES", "FedEx Priority Overnight")
+F.Data.Dictionary.AddItem("dicVia", "FEDEX PRIORITY OVERN", "FedEx Priority Overnight")
+F.Data.Dictionary.AddItem("dicVia", "FEDEX - PPA", "FedEx Ground")
+F.Data.Dictionary.AddItem("dicVia", "FEDEX GROUND", "FedEx Ground")
+F.Data.Dictionary.AddItem("dicVia", "FEDEX - COLLECT", "FedEx Standard Overnight")
+F.Data.Dictionary.AddItem("dicVia", "FEDEX STANDARD OVERN", "FedEx Standard Overnight")
+F.Data.Dictionary.AddItem("dicVia", "HOLLAND", "UPS 2nd Day")
+F.Data.Dictionary.AddItem("dicVia", "UPS 2ND DAY", "UPS 2nd Day")
+F.Data.Dictionary.AddItem("dicVia", "INT'NTL-SEE AGRMNT", "UPS 2nd Day Air AM")
+F.Data.Dictionary.AddItem("dicVia", "UPS 2ND DAY AIR AM", "UPS 2nd Day Air AM")
+F.Data.Dictionary.AddItem("dicVia", "J&J TRUCKING", "FedEx 2 day")
+F.Data.Dictionary.AddItem("dicVia", "FEDEX 2 DAY", "FedEx 2 day")
+F.Data.Dictionary.AddItem("dicVia", "RNL", "UPS 3 Day Select")
+F.Data.Dictionary.AddItem("dicVia", "UPS 3 DAY SELECT", "UPS 3 Day Select")
+F.Data.Dictionary.AddItem("dicVia", "DAYTON", "UPS Next Day Air")
+F.Data.Dictionary.AddItem("dicVia", "UPS NEXT DAY AIR", "UPS Next Day Air")
+'F.Data.Dictionary.AddItem("dicVia", "MXD", "")
+'F.Data.Dictionary.AddItem("dicVia", "FEDEX", "")
+F.Data.Dictionary.AddItem("dicVia", "ACT", "UPS Next Day Air Early")
+F.Data.Dictionary.AddItem("dicVia", "UPS NEXT DAY AIR EAR", "UPS Next Day Air Early")
+F.Data.Dictionary.AddItem("dicVia", "OLD DOMINION", "UPS Next Day Air Saver")
+F.Data.Dictionary.AddItem("dicVia", "UPS NEXT DAY AIR SAV", "UPS Next Day Air Saver")
+F.Data.Dictionary.AddItem("dicVia", "UPS - COLLECT", "UPS Standard")
+F.Data.Dictionary.AddItem("dicVia", "UPS STANDARD", "UPS Standard")
+F.Data.Dictionary.AddItem("dicVia", "SOUTHEASTERN", "UPS Worldwide Expedited")
+F.Data.Dictionary.AddItem("dicVia", "UPS WORLDWIDE EXPEDI", "UPS Worldwide Expedited")
+F.Data.Dictionary.AddItem("dicVia", "ROADRUNNER", "UPS Worldwide Express")
+F.Data.Dictionary.AddItem("dicVia", "UPS WORLDWIDE EXPRES", "UPS Worldwide Express")
+F.Data.Dictionary.AddItem("dicVia", "UNISHIPPERS", "UPS Worldwide Express Plus")
+F.Data.Dictionary.AddItem("dicVia", "UPS WORLDWIDE EXPR+", "UPS Worldwide Express Plus")
+F.Data.Dictionary.AddItem("dicVia", "TOTAL QUALITY LOGIST", "FedEx Freight Economy")
+F.Data.Dictionary.AddItem("dicVia", "FEDEX FREIGHT ECONO", "FedEx Freight Economy")
+F.Data.Dictionary.AddItem("dicVia", "UPS - PPA", "UPS Ground")
+F.Data.Dictionary.AddItem("dicVia", "UPS GROUND", "UPS Ground")
+F.Data.Dictionary.AddItem("dicVia", "CH ROBINSON- SEE CRM", "UPS Worldwide saver")
+F.Data.Dictionary.AddItem("dicVia", "UPS WORLDWIDE SAVER", "UPS Worldwide saver")
+'F.Data.Dictionary.AddItem("dicVia", "NO FREIGHT CHARGED", "")
+'F.Data.Dictionary.AddItem("dicVia", "YRC", "")
+'F.Data.Dictionary.AddItem("dicVia", "CONTACT CUSTOMER", "")
+'F.Data.Dictionary.AddItem("dicVia", "COLLECT", "")
+F.Data.Dictionary.SetDefaultReturn("dicVia", "")
+
+F.Intrinsic.Control.Catch
+	F.Intrinsic.String.Concat("Project: GCG_5583_TrackingUpdate.g2u", V.Ambient.Newline,V.Ambient.Newline,"Subroutine: ",V.Ambient.CurrentSubroutine,V.Ambient.NewLine,"Error Occurred ",V.Ambient.ErrorNumber," with description ",V.Ambient.ErrorDescription,V.Local.sError)
+	F.Intrinsic.UI.Msgbox(V.Local.sError) 
+	F.Intrinsic.Control.End
+F.Intrinsic.Control.Endtry
+Program.Sub.ShipViaDic.End
