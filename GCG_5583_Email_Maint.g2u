@@ -1,0 +1,222 @@
+Program.Sub.ScreenSU.Start
+Gui.F_Emails..Create
+Gui.F_Emails..Caption("List of emails for Shopify Orders")
+Gui.F_Emails..Size(8175,8295)
+Gui.F_Emails..MinX(0)
+Gui.F_Emails..MinY(0)
+Gui.F_Emails..Position(0,0)
+Gui.F_Emails..BackColor(-2147483633)
+Gui.F_Emails..MousePointer(0)
+Gui.F_Emails..Event(UnLoad,Unload)
+Gui.F_Emails.gsgcEmails.Create(GsGridControl)
+Gui.F_Emails.gsgcEmails.Size(7755,5655)
+Gui.F_Emails.gsgcEmails.Position(150,1440)
+Gui.F_Emails.txtEmail.Create(TextBox,"",True,4305,300,0,3495,420,True,0,"Arial",8,-2147483643,1)
+Gui.F_Emails.cmdAdd.Create(Button)
+Gui.F_Emails.cmdAdd.Size(855,375)
+Gui.F_Emails.cmdAdd.Position(6885,885)
+Gui.F_Emails.cmdAdd.Caption("ADD")
+Gui.F_Emails.cmdAdd.Event(Click,AddClick)
+Gui.F_Emails.cmdSave.Create(Button)
+Gui.F_Emails.cmdSave.Size(855,375)
+Gui.F_Emails.cmdSave.Position(6840,7215)
+Gui.F_Emails.cmdSave.Caption("SAVE")
+Gui.F_Emails.cmdSave.Event(Click,SaveClick)
+Gui.F_Emails.lbl1.Create(Label,"Email Address",True,1935,255,0,3510,195,True,0,"Arial",8,-2147483633,0)
+Gui.F_Emails.cmdDelete.Create(Button)
+Gui.F_Emails.cmdDelete.Size(855,375)
+Gui.F_Emails.cmdDelete.Position(5880,7215)
+Gui.F_Emails.cmdDelete.Caption("DELETE")
+Gui.F_Emails.cmdDelete.Event(Click,DeleteClick)
+Gui.F_Emails.txtName.Create(TextBox,"",True,3105,300,0,150,420,True,0,"Arial",8,-2147483643,1)
+Gui.F_Emails.lbl2.Create(Label,"Name",True,1935,255,0,195,195,True,0,"Arial",8,-2147483633,0)
+Program.Sub.ScreenSU.End
+
+Program.Sub.Preflight.Start
+Program.Sub.Preflight.End
+
+Program.Sub.Main.Start
+F.Intrinsic.Control.Try
+V.Local.sError.Declare(String, "")
+
+'This script is part of the integration of Global Shop and Shopify for Mixer Direct.
+'This is just a maintenance program that will allow the user to provide email recepients for any time the integration creates a sales order in Global Shop from Shopify.
+'This will run off a custom menu item
+'Created 6/24 by FEQ
+
+F.Intrinsic.Control.CallSub(GrabData)
+F.Intrinsic.Control.CallSub(GenerateGrid)
+
+Gui.F_Emails..Show
+
+F.Intrinsic.Control.Catch
+	F.Intrinsic.String.Build("Project: {0}{1}{1}Subroutine: {2}{1}Error Occurred {3} with description {4}{1}{1}GAB Version: {5}", V.Ambient.ScriptPath,V.Ambient.Newline,V.Ambient.CurrentSubroutine,V.Ambient.ErrorNumber,V.Ambient.ErrorDescription,V.Ambient.GABVersion,V.Local.sError)
+	F.Intrinsic.UI.Msgbox(V.Local.sError)
+	F.Intrinsic.Control.CallSub(Unload)
+F.Intrinsic.Control.EndTry
+Program.Sub.Main.End
+
+Program.Sub.GrabData.Start
+F.Intrinsic.Control.Try
+V.Local.sError.Declare(String, "")
+
+F.ODBC.Connection!conx.OpenCompanyConnection
+
+F.Data.DataTable.CreateFromSQL("dtEmails", "conx", "Select AUTONUM, RTRIM(EMAILADDY) as EMAILADDY, RTRIM(RECEPIENTNAME) as RECEPIENTNAME from GCG_5583_EMAILS", True)
+F.Data.DataTable.AddColumn("dtEmails", "DELETED", "String", "")
+
+F.Data.DataView.Create("dtEmails", "dvEmails", 22, "[DELETED] = ''", "AUTONUM ASC")
+
+F.ODBC.Connection!conx.Close
+
+F.Intrinsic.Control.Catch
+	F.Intrinsic.String.Build("Project: {0}{1}{1}Subroutine: {2}{1}Error Occurred {3} with description {4}{1}{1}GAB Version: {5}",V.Ambient.ScriptPath,V.Ambient.Newline,V.Ambient.CurrentSubroutine,V.Ambient.ErrorNumber,V.Ambient.ErrorDescription,V.Ambient.GABVersion,V.Local.sError)
+	F.Intrinsic.UI.Msgbox(V.Local.sError)
+	F.Intrinsic.Control.CallSub(Unload)
+F.Intrinsic.Control.EndTry
+Program.Sub.GrabData.End
+
+Program.Sub.GenerateGrid.Start
+F.Intrinsic.Control.Try
+V.Local.sError.Declare(String, "")
+
+Gui.F_Emails.gsgcEmails.AddGridviewFromDataview("gridEmails", "dtEmails", "dvEmails")
+
+Gui.F_Emails.gsgcEmails.SetColumnProperty("gridEmails", "AUTONUM", "Visible", False)
+Gui.F_Emails.gsgcEmails.SetColumnProperty("gridEmails", "DELETED", "Visible", False)
+
+Gui.F_Emails.gsgcEmails.SetColumnProperty("gridEmails", "RECEPIENTNAME", "Caption", "Name")
+Gui.F_Emails.gsgcEmails.SetColumnProperty("gridEmails", "RECEPIENTNAME", "VisibleIndex", 1)
+Gui.F_Emails.gsgcEmails.SetColumnProperty("gridEmails", "RECEPIENTNAME", "AllowEdit", False)
+Gui.F_Emails.gsgcEmails.SetColumnProperty("gridEmails", "RECEPIENTNAME", "ReadOnly", True)
+Gui.F_Emails.gsgcEmails.SetColumnProperty("gridEmails", "RECEPIENTNAME", "Width", 200)
+
+Gui.F_Emails.gsgcEmails.SetColumnProperty("gridEmails", "EMAILADDY", "Caption", "Email Address")
+Gui.F_Emails.gsgcEmails.SetColumnProperty("gridEmails", "EMAILADDY", "VisibleIndex", 2)
+Gui.F_Emails.gsgcEmails.SetColumnProperty("gridEmails", "EMAILADDY", "AllowEdit", False)
+Gui.F_Emails.gsgcEmails.SetColumnProperty("gridEmails", "EMAILADDY", "ReadOnly", True)
+Gui.F_Emails.gsgcEmails.SetColumnProperty("gridEmails", "EMAILADDY", "Width", 250)
+
+Gui.F_Emails.gsgcEmails.MainView("gridEmails")
+
+F.Intrinsic.Control.Catch
+	F.Intrinsic.String.Build("Project: {0}{1}{1}Subroutine: {2}{1}Error Occurred {3} with description {4}{1}{1}GAB Version: {5}",V.Ambient.ScriptPath,V.Ambient.Newline,V.Ambient.CurrentSubroutine,V.Ambient.ErrorNumber,V.Ambient.ErrorDescription,V.Ambient.GABVersion,V.Local.sError)
+	F.Intrinsic.UI.Msgbox(V.Local.sError)
+	F.Intrinsic.Control.CallSub(Unload)
+F.Intrinsic.Control.EndTry
+Program.Sub.GenerateGrid.End
+
+Program.Sub.AddClick.Start
+F.Intrinsic.Control.Try
+V.Local.sError.Declare(String, "")
+V.Local.sEmail.Declare(String, "")
+V.Local.sFilter.Declare(String, "")
+
+'We verify that the content of the email textbox has a valid email
+F.Intrinsic.String.Split(V.Screen.F_Emails!txtEmail.Text.Trim, " ", V.Local.sEmail)
+F.Intrinsic.Control.If(V.Local.sEmail.UBound, =, 0)
+	F.Intrinsic.String.Split(V.Local.sEmail, "@", V.Local.sEmail)
+	F.Intrinsic.Control.If(V.Local.sEmail.UBound, =, 1)
+		'Make sure the email is not duplicated
+		F.Intrinsic.String.Build("[EMAILADDY] = '{0}'", V.Screen.F_Emails!txtEmail.Text.Trim, V.Local.sFilter)
+		F.Data.DataView.Create("dtEmails", "dvCheck", 22, V.Local.sFilter, "")
+		F.Intrinsic.Control.If(V.DataView.dtEmails!dvCheck.RowCount, =, 0)
+			'Then we add the email to the grid
+			F.Data.DataTable.AddRow("dtEmails", "EMAILADDY", V.Screen.F_Emails!txtEmail.Text.Trim, "RECEPIENTNAME", V.Screen.F_Emails!txtName.Text.Trim, "AUTONUM", -1, "DELETED", "")
+		F.Intrinsic.Control.Else
+			F.Data.DataView.SetValue("dtEmails", "dvCheck", -1, "DELETED", "")
+		F.Intrinsic.Control.EndIf
+		F.Data.DataView.Close("dtEmails", "dvCheck")
+		Gui.F_Emails.txtEmail.Text("")
+		Gui.F_Emails.txtName.Text("")
+		F.Intrinsic.Control.ExitSub
+	F.Intrinsic.Control.EndIf
+F.Intrinsic.Control.EndIf
+
+'We should only get to this point if we were unable to add the email to the grid.
+F.Intrinsic.UI.Msgbox("Email was not added to the grid. Please verify that the email is correct.", "EMAIL ERROR")
+
+F.Intrinsic.Control.Catch
+	F.Intrinsic.String.Build("Project: {0}{1}{1}Subroutine: {2}{1}Error Occurred {3} with description {4}{1}{1}GAB Version: {5}",V.Ambient.ScriptPath,V.Ambient.Newline,V.Ambient.CurrentSubroutine,V.Ambient.ErrorNumber,V.Ambient.ErrorDescription,V.Ambient.GABVersion,V.Local.sError)
+	F.Intrinsic.UI.Msgbox(V.Local.sError)
+	F.Intrinsic.Control.CallSub(Unload)
+F.Intrinsic.Control.EndTry
+Program.Sub.AddClick.End
+
+Program.Sub.SaveClick.Start
+F.Intrinsic.Control.Try
+V.Local.sError.Declare(String, "")
+V.Local.sDeleted.Declare(String, "")
+V.Local.sSql.Declare(String, "")
+
+Gui.F_Emails..Visible(False)
+
+F.ODBC.Connection!conx.OpenCompanyConnection
+
+F.Data.DataView.Create("dtEmails", "dvDeleted", 22, "[DELETED] = 'D' AND [AUTONUM] <> '-1'", "")
+F.Intrinsic.Control.If(V.DataView.dtEmails!dvDeleted.RowCount, >, 0)
+	F.Data.DataView.ToString("dtEmails", "dvDeleted", "AUTONUM", "", "', '", V.Local.sDeleted)
+	F.Intrinsic.String.Build("Delete from GCG_5583_EMAILS where AUTONUM in ('{0}')", V.Local.sDeleted, V.Local.sSql)
+	F.ODBC.Connection!conx.Execute(V.Local.sSql)
+	
+F.Intrinsic.Control.EndIf
+F.Data.DataView.Close("dtEmails", "dvDeleted")
+
+F.Data.DataView.Create("dtEmails", "dvNew", 22, "[DELETED] = '' AND [AUTONUM] = '-1'", "")
+F.Intrinsic.Control.If(V.DataView.dtEmails!dvNew.RowCount, >, 0)
+	F.Data.DataView.ToDataTable("dtEmails", "dvNew", "dtSave", True)
+	F.Data.DataTable.RemoveColumn("dtSave", "AUTONUM")
+	F.Data.DataTable.RemoveColumn("dtSave", "DELETED")
+	F.Data.DataTable.SaveToDB("dtSave", "conx", "GCG_5583_EMAILS", "", 128)
+	F.Data.DataTable.Close("dtSave")
+F.Intrinsic.Control.EndIf
+F.Data.DataView.Close("dtEmails", "dvNew")
+
+F.Data.DataView.Close("dtEmails", "dvEmails")
+F.Data.DataTable.Close("dtEmails")
+
+F.ODBC.Connection!conx.Close
+
+F.Intrinsic.Control.CallSub(Main)
+
+F.Intrinsic.Control.Catch
+	F.Intrinsic.String.Build("Project: {0}{1}{1}Subroutine: {2}{1}Error Occurred {3} with description {4}{1}{1}GAB Version: {5}",V.Ambient.ScriptPath,V.Ambient.Newline,V.Ambient.CurrentSubroutine,V.Ambient.ErrorNumber,V.Ambient.ErrorDescription,V.Ambient.GABVersion,V.Local.sError)
+	F.Intrinsic.UI.Msgbox(V.Local.sError)
+	F.Intrinsic.Control.CallSub(Unload)
+F.Intrinsic.Control.EndTry
+Program.Sub.SaveClick.End
+
+Program.Sub.DeleteClick.Start
+F.Intrinsic.Control.Try
+V.Local.sError.Declare(String, "")
+V.Local.sRows.Declare(String, "")
+V.Local.iRows.Declare(Long, 0)
+
+Gui.F_Emails.gsgcEmails.GetSelectedRows("gridEmails", V.Local.sRows)
+
+F.Intrinsic.Control.If(V.Local.sRows, <>, "")
+	F.Intrinsic.String.Split(V.Local.sRows, "*!*", V.Local.sRows)
+	F.Intrinsic.Control.For(V.Local.iRows, 0, V.Local.sRows.UBound, 1)
+		F.Data.DataTable.SetValue("dtEmails", V.Local.sRows(V.Local.iRows).Long, "DELETED", "D")
+	F.Intrinsic.Control.Next(V.Local.iRows)
+F.Intrinsic.Control.EndIf
+
+F.Intrinsic.Control.Catch
+	F.Intrinsic.String.Build("Project: {0}{1}{1}Subroutine: {2}{1}Error Occurred {3} with description {4}{1}{1}GAB Version: {5}",V.Ambient.ScriptPath,V.Ambient.Newline,V.Ambient.CurrentSubroutine,V.Ambient.ErrorNumber,V.Ambient.ErrorDescription,V.Ambient.GABVersion,V.Local.sError)
+	F.Intrinsic.UI.Msgbox(V.Local.sError)
+	F.Intrinsic.Control.CallSub(Unload)
+F.Intrinsic.Control.EndTry
+Program.Sub.DeleteClick.End
+
+Program.Sub.Unload.Start
+F.Intrinsic.Control.Try
+V.Local.sError.Declare(String, "")
+
+F.Intrinsic.Control.End
+
+F.Intrinsic.Control.Catch
+	F.Intrinsic.String.Build("Project: {0}{1}{1}Subroutine: {2}{1}Error Occurred {3} with description {4}{1}{1}GAB Version: {5}",V.Ambient.ScriptPath,V.Ambient.Newline,V.Ambient.CurrentSubroutine,V.Ambient.ErrorNumber,V.Ambient.ErrorDescription,V.Ambient.GABVersion,V.Local.sError)
+	F.Intrinsic.UI.Msgbox(V.Local.sError)
+	F.Intrinsic.Control.End 
+F.Intrinsic.Control.EndTry
+Program.Sub.Unload.End
