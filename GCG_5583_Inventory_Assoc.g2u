@@ -1,0 +1,160 @@
+Program.Sub.Preflight.Start
+Program.Sub.Preflight.End
+
+Program.Sub.Main.Start
+F.Intrinsic.Control.Try
+V.Local.sError.Declare(String, "")
+
+'This script was created for Mixer Direct as part of the integration with Shoppify. 
+'The association that Mixer Direct uses when it comes to matching inventory from Global Shop to SHopify is not directly passed from teh order API, thus we are creating the association in a different table for easy access when creating orders for them.
+'FEQ 6/25/2019
+
+'This grabs the data in the global shop system so that it knows whats already been grabbed from the website.
+F.Intrinsic.Control.CallSub(PartAssoc)
+
+'The passed variable for the subroutine is the page number for the parts we are receiving. The first time we call the subroutine, we will pass it a 1. It is then called recursively within it everytime it depletes the data from the current page.
+F.Intrinsic.Control.CallSub(PartGathering, "COUNT", 1)
+F.Intrinsic.Control.CallSub(SaveInfo)
+
+F.Intrinsic.Control.Catch
+	F.Intrinsic.String.Concat("Project: GCG_5583_INV_ASSOC.g2u", V.Ambient.Newline,V.Ambient.Newline,"Subroutine: ",V.Ambient.CurrentSubroutine,V.Ambient.NewLine,"Error Occurred ",V.Ambient.ErrorNumber," with description ",V.Ambient.ErrorDescription,V.Local.sError)
+	F.Intrinsic.UI.Msgbox(V.Local.sError) 
+	F.Intrinsic.Control.CallSub(Unload)
+F.Intrinsic.Control.Endtry
+Program.Sub.Main.End
+
+Program.Sub.PartGathering.Start
+F.Intrinsic.Control.Try
+V.Local.sError.Declare(String, "")
+V.Local.sUser.Declare(String, "")
+V.Local.sPass.Declare(String, "")
+V.Local.sURL.Declare(String, "")
+V.Local.sFile.Declare(String, "")
+V.Local.sRet.Declare(String, "")
+V.Local.sData.Declare(String, "")
+V.Local.sHeadPath.Declare(String, "")
+V.Local.sTemp.Declare(String, "")
+V.Local.sPartID.Declare(String, "")
+V.Local.sFilter.Declare(String, "")
+V.Local.sLinePath.Declare(String, "")
+V.Local.bFlag.Declare(Boolean, False)
+V.Local.iCounter.Declare(Long, 0)
+V.Local.iLine.Declare(Long, 0)
+
+V.Local.iCounter.Set(V.Args.Count.Long)
+V.Local.sUser.Set("4852e9aa53b7a2630b09d99e31f1a1a7")
+V.Local.sPass.Set("cc8a783818abc9c6309e3ba34c5ff562")
+
+'the script had to be modified to get the information in pages.
+F.Intrinsic.String.Build("https://mixer-direct.myshopify.com/admin/products.json?page={0}", V.Local.iCounter, V.Local.sURL)
+F.Intrinsic.String.Build("{0}\{1}ORDS.json", V.Caller.TempDir, V.Caller.CompanyCode, V.Local.sFile)
+
+F.Communication.REST.SetProperty("HTTPMethod","GET")
+F.Communication.REST.SetProperty("User",V.Local.sUser)
+F.Communication.REST.SetProperty("Password",V.Local.sPass)
+F.Communication.REST.SetProperty("ContentType", "application/json; charset=utf-8")
+F.Communication.REST.SetProperty("Accept","application/json")
+F.Communication.REST.SetProperty("LocalFile", V.Local.sFile)
+F.Communication.REST.Config("SSLEnabledProtocols=4032",V.Local.sRet)
+
+F.Communication.REST.Get(V.Local.sURL)
+
+F.Communication.REST.DoEvents()
+F.Communication.REST.ReadProperty("TransferredData", V.Local.sData)
+
+F.Communication.JSON.ParseFile(V.Local.sFile)
+V.Local.iLine.Set(1)
+F.Intrinsic.String.Build("/json/products/[{0}]",V.Local.iLine,V.Local.sHeadPath)
+F.Communication.JSON.HasXPath(V.Local.sHeadPath,V.Local.bFlag)
+
+'This script makes the assumption that the parts are being returned in the order that they were created, which it should, from newest created to oldest. Therefore this loop keeps going until it finds a part that we have already created an association with.
+F.Intrinsic.Control.DoUntil(V.Local.bFlag,=,False)
+
+	'Web Id
+	F.Intrinsic.String.Build("/json/products/[{0}]/id", V.Local.iLine, V.Local.sTemp)
+	F.Communication.JSON.SetProperty("XPath",V.Local.sTemp)
+	F.Communication.JSON.ReadProperty("XText",V.Local.sTemp)
+	V.Local.sPartID.Set(V.Local.sTemp.Trim)
+	
+	F.Intrinsic.String.Build("[WEBID] = '{0}'", V.Local.sPartID.Trim, V.Local.sFilter)
+	F.Data.DataView.Create("dtInv", "dvCheck", 22, V.Local.sFilter, "")
+	F.Intrinsic.Control.If(V.DataView.dtInv!dvCheck.RowCount, =, 0)
+		'we add the part
+		'Barcode i.e. part number in GS
+		F.Intrinsic.String.Build("/json/products/[{0}]/variants/[1]/barcode", V.Local.iLine, V.Local.sTemp)
+		F.Communication.JSON.SetProperty("XPath",V.Local.sTemp)
+		F.Communication.JSON.ReadProperty("XText",V.Local.sTemp)
+		F.Intrinsic.String.Replace(V.Local.sTemp, V.Ambient.DblQuote, "", V.Local.sTemp)
+		
+		F.Data.DataTable.AddRow("dtInv", "WEBID", V.Local.sPartID, "INV_PART", V.Local.sTemp.Trim)
+		
+		F.Intrinsic.Math.Add(V.Local.iLine, 1, V.Local.iLine)
+		F.Intrinsic.String.Build("/json/products/[{0}]", V.Local.iLine, V.Local.sLinePath)
+		F.Communication.JSON.HasXPath(V.Local.sLinePath, V.Local.bFlag)
+	F.Intrinsic.Control.Else
+		'part was already recorded so we exit the loop and stop, since this is where we started the previous time this was ran
+		V.Local.bFlag.Set(False)
+	F.Intrinsic.Control.EndIf
+	F.Data.DataView.Close("dtInv", "dvCheck")
+F.Intrinsic.Control.Loop
+
+'The GET only returns 50 items at a time, so we check to see if the max was 51, then we would add one to the page counter so that it requests the next page
+F.Intrinsic.Control.If(V.Local.iLine, =, 51)
+	F.Intrinsic.Math.Add(V.Local.iCounter, 1, V.Local.iCounter)
+	F.Intrinsic.Control.CallSub(PartGathering, "Count", V.Local.iCounter)
+F.Intrinsic.Control.EndIf
+
+F.Intrinsic.Control.Catch
+	F.Intrinsic.String.Concat("Project: GCG_5583_INV_ASSOC.g2u", V.Ambient.Newline,V.Ambient.Newline,"Subroutine: ",V.Ambient.CurrentSubroutine,V.Ambient.NewLine,"Error Occurred ",V.Ambient.ErrorNumber," with description ",V.Ambient.ErrorDescription,V.Local.sError)
+	F.Intrinsic.UI.Msgbox(V.Local.sError) 
+	F.Intrinsic.Control.CallSub(Unload)
+F.Intrinsic.Control.Endtry
+Program.Sub.PartGathering.End
+
+Program.Sub.Unload.Start
+F.Intrinsic.Control.Try
+V.Local.sError.Declare(String, "")
+
+F.Intrinsic.Control.End
+
+F.Intrinsic.Control.Catch
+	F.Intrinsic.String.Concat("Project: GCG_5583_INV_ASSOC.g2u", V.Ambient.Newline,V.Ambient.Newline,"Subroutine: ",V.Ambient.CurrentSubroutine,V.Ambient.NewLine,"Error Occurred ",V.Ambient.ErrorNumber," with description ",V.Ambient.ErrorDescription,V.Local.sError)
+	F.Intrinsic.UI.Msgbox(V.Local.sError) 
+	F.Intrinsic.Control.CallSub(Unload)
+F.Intrinsic.Control.Endtry
+Program.Sub.Unload.End
+
+Program.Sub.PartAssoc.Start
+F.Intrinsic.Control.Try
+V.Local.sError.Declare(String, "")
+
+F.ODBC.Connection!conx.OpenCompanyConnection
+
+'We are going to use this table to keep track of the data we already have. 
+F.Data.DataTable.CreateFromSQL("dtInv", "conx", "Select WEBID, INV_PART from GCG_5583_INV_ASSOC", True)
+
+F.ODBC.Connection!conx.Close
+
+F.Intrinsic.Control.Catch
+	F.Intrinsic.String.Concat("Project: GCG_5583_INV_ASSOC.g2u", V.Ambient.Newline,V.Ambient.Newline,"Subroutine: ",V.Ambient.CurrentSubroutine,V.Ambient.NewLine,"Error Occurred ",V.Ambient.ErrorNumber," with description ",V.Ambient.ErrorDescription,V.Local.sError)
+	F.Intrinsic.UI.Msgbox(V.Local.sError) 
+	F.Intrinsic.Control.End
+F.Intrinsic.Control.Endtry
+Program.Sub.PartAssoc.End
+
+Program.Sub.SaveInfo.Start
+F.Intrinsic.Control.Try
+V.Local.sError.Declare(String, "")
+
+F.ODBC.Connection!conx.OpenCompanyConnection
+
+F.Data.DataTable.SaveToDB("dtInv", "conx", "GCG_5583_INV_ASSOC", "WEBID")
+
+F.ODBC.Connection!conx.Close
+
+F.Intrinsic.Control.Catch
+	F.Intrinsic.String.Concat("Project: GCG_5583_INV_ASSOC.g2u", V.Ambient.Newline,V.Ambient.Newline,"Subroutine: ",V.Ambient.CurrentSubroutine,V.Ambient.NewLine,"Error Occurred ",V.Ambient.ErrorNumber," with description ",V.Ambient.ErrorDescription,V.Local.sError)
+	F.Intrinsic.UI.Msgbox(V.Local.sError) 
+	F.Intrinsic.Control.End
+F.Intrinsic.Control.Endtry
+Program.Sub.SaveInfo.End
